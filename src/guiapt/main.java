@@ -362,11 +362,12 @@ public class main extends javax.swing.JFrame {
 
     }
 
-    void dependends() throws IOException {
+    void dependends(String action) throws IOException{
         new Thread(() -> {
             try {
+                String pkgs = action.equals("remove") ? getCheckedLocal() : getChecked();
                 bashCommand
-                        = "apt show " + getChecked() + " 2>/dev/null | grep -E '^Depends:' | sed 's/Depends: //' | tr ',|' '\\n' | sed 's/ .*//' | grep -v '^$' | sort -u | paste -sd,";
+                        = "apt show " + pkgs + " 2>/dev/null | grep -E '^Depends:' | sed 's/Depends: //' | tr ',|' '\\n' | sed 's/ .*//' | grep -v '^$' | sort -u | paste -sd,";
 
                 ProcessBuilder pb = new ProcessBuilder("bash", "-c", bashCommand);
                 Process process = pb.start();
@@ -1014,7 +1015,7 @@ public class main extends javax.swing.JFrame {
                     bashCommand
                             = "pkexec env DEBIAN_FRONTEND=noninteractive "
                             + "apt-get " + arg + " -y -o APT::Status-Fd=1 "
-                            + getChecked();
+                            + (arg.equals("remove") ? getCheckedLocal() : getChecked());
                 }
                 ProcessBuilder pb = new ProcessBuilder("bash", "-c", bashCommand);
                 pb.redirectErrorStream(true);
@@ -1792,7 +1793,7 @@ public class main extends javax.swing.JFrame {
         action = 1;
         try {
             totalsize();
-            dependends();
+            dependends("install");
         } catch (IOException ex) {
             Logger.getLogger(main.class.getName()).log(Level.SEVERE, null, ex);
         } finally {
@@ -1838,14 +1839,14 @@ public class main extends javax.swing.JFrame {
         Confirm.pack();
         Confirm.setLocationRelativeTo(this);
         confirmtitle.setText("This packages are pending to be remove:");
-        checked.setText(getChecked().replace(" ", ", "));
+        checked.setText(getCheckedLocal().replace(" ", ", "));
         if (checked.getText().length() > 70) {
             checked.setText(checked.getText().substring(0, 71).replaceAll(",\\s*$", "") + "...");
         }
         action = 2;
         try {
             totalsize();
-            dependends();
+            dependends("remove");
         } catch (IOException ex) {
             Logger.getLogger(main.class.getName()).log(Level.SEVERE, null, ex);
         } finally {
