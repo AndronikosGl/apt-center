@@ -1202,6 +1202,7 @@ private static void applyHoverInvert(JMenu menu) {
             UIManager.put("TabbedPane.inactiveUnderlineColor", new Color(0x2285E1));
             UIManager.put("Table.selectionBackground",new Color(0xD3D3D3));
             UIManager.put("Table.selectionForeground", Color.BLACK);
+            UIManager.put("Table.cellFocusColor", new Color(0xD3D3D3));
             UIManager.put("MenuBar.border", BorderFactory.createEmptyBorder());
             UIManager.put("MenuBar.borderColor", new Color(0, 0, 0, 0));
             UIManager.put("ScrollBar.width", 11);
