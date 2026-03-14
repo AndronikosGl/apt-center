@@ -1,4 +1,4 @@
-## <img src="src/guiapt/icon.png" width="40px"> Apt Center
+## <img src="src/aptcenter/icon.png" width="40px"> Apt Center
 Apt Center is a lightweight GUI package manager for the APT backend written in Java. It aims to be a minimal, portable alternative to Synaptic, focusing on ease of use and portability across desktop environments
 
 **The interface consists of 3 tabs:**
@@ -33,5 +33,7 @@ Apt Center is a lightweight GUI package manager for the APT backend written in J
 ## Copyright and licensing
 Copyright © AndronikosGl 2026. All rights reserved.
 
-This project is source-available. Modification and redistribution are not permitted. This project includes a modified asset based on Google Noto Emoji (SIL Open Font License 1.1).
+This project is source-available. Modification and redistribution are not permitted. This project includes a modified asset based on Google Noto Emoji (SIL Open Font License 1.1).<br>
+This project uses the FlatLaf look and feel library.<br>
+https://www.formdev.com/flatlaf/<br>
 

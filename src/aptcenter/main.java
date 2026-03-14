@@ -49,6 +49,7 @@ import java.awt.Component;
 import java.awt.KeyboardFocusManager;
 import java.awt.image.BufferedImage;
 import java.io.File;     // if you load icons from file
+import java.util.prefs.Preferences;
 
 /**
  *
@@ -56,6 +57,7 @@ import java.io.File;     // if you load icons from file
  */
 public class main extends javax.swing.JFrame {
 
+    private final Preferences prefs = Preferences.userRoot().node("aptcenter");
     private javax.swing.Timer listingTimer;
     int action;
     volatile boolean cancelListing = false;
@@ -457,7 +459,7 @@ public class main extends javax.swing.JFrame {
                 return "utils|admin|misc";
 
             case "Internet":
-                return "net|web|mail|ftp|irc";
+                return "net|web|mail|ftp|irc|browser";
 
             case "Games":
                 return "games";
@@ -466,13 +468,13 @@ public class main extends javax.swing.JFrame {
                 return "graphics|video";
 
             case "Office":
-                return "editors|text";
+                return "editors|text|office";
 
             case "Binaries":
                 return "utils|admin";
 
             case "Desktops":
-                return "gnome|kde|xfce|lxde|mate|x11";
+                return "gnome|kde|xfce|lxde|mate|x11|desktop";
 
             default:
                 return "";
@@ -562,7 +564,7 @@ public class main extends javax.swing.JFrame {
                         + "        [ -z \"$icon\" ] && icon=\"N/A\"; "
                         + "        echo \"(${pretty})[${desc}]{${arch}}<${icon}>?${pkg}?\"; "
                         + "        count=$((count+1)); "
-                        + "        [ $count -ge 400 ] && break; "
+                        + "        [ $count -ge " + prefs.getInt("limit", 500) + " ] && break; "
                         + "    fi; "
                         + "done";
 
@@ -570,7 +572,7 @@ public class main extends javax.swing.JFrame {
                 currentProcess = pb.start();
                 BufferedReader reader = new BufferedReader(new InputStreamReader(currentProcess.getInputStream()));
                 String line;
-                int totalLines = 400;
+                int totalLines = prefs.getInt("limit", 500);
                 int currentLine = 0;
                 List<String> results = new ArrayList<>();
                 while (!cancelListing && (line = reader.readLine()) != null) {
@@ -659,35 +661,45 @@ public class main extends javax.swing.JFrame {
             status.setText("Listing packages...");
             try {
                 String cat = mapCategory(category);
-                bashCommand
+                String bashCommand
                         = "installed=$(dpkg -l | awk '/^ii/ {print $2}'); "
+                        + "count=0; "
                         + "apt-cache dumpavail | awk -v cat=\"" + cat + "\" '"
-                        + "/^Package:/ {pkg=$2}"
-                        + "/^Description/ && desc==\"\" {sub(/^.*: /, \"\", $0); desc=$0}"
-                        + "/^Architecture:/ {arch=$2}"
-                        + "/^Section:/ {section=$2}"
-                        + "/^$/ {"
-                        + "    if (pkg != \"\" && (cat == \"\" || tolower(section) ~ cat)) {"
-                        + "        if (desc == \"\") desc=\"No description available\";"
-                        + "        if (arch == \"\") arch=\"unknown\";"
-                        + "        print pkg \"|\" desc \"|\" arch"
-                        + "    }"
-                        + "    pkg=\"\"; desc=\"\"; arch=\"\"; section=\"\""
-                        + "}' | head -n 500 | while IFS=\"|\" read -r pkg desc arch; do "
-                        + "    if ! echo \"$installed\" | grep -qx \"$pkg\"; then " // skip installed here
-                        + "        pretty=$(grep -R \"Name=\" /usr/share/applications/ | grep -i \"$pkg\" | head -n1 | cut -d'=' -f2); "
+                        + "BEGIN { pkg=\"\"; desc=\"\"; arch=\"\"; section=\"\" } "
+                        + "/^Package:/ { pkg=$2 } "
+                        + "/^Section:/ { section=$2 } "
+                        + "/^Architecture:/ { arch=$2 } "
+                        + "/^Description:/ { "
+                        + "    desc=$0; sub(/^Description: /, \"\", desc); "
+                        + "    while (getline nextLine && nextLine ~ /^ /) { "
+                        + "        sub(/^ /, \"\", nextLine); desc = desc \" \" nextLine; "
+                        + "    } "
+                        + "} "
+                        + "/^$/ { "
+                        + "    if (pkg != \"\" && (cat == \"\" || tolower(section) ~ cat)) { "
+                        + "        if (desc == \"\") desc=\"No description available\"; "
+                        + "        if (arch == \"\") arch=\"unknown\"; "
+                        + "        print pkg \"|\" desc \"|\" arch; "
+                        + "    } "
+                        + "    pkg=\"\"; desc=\"\"; arch=\"\"; section=\"\"; "
+                        + "} "
+                        + "' | while IFS=\"|\" read -r pkg desc arch; do "
+                        + "    if ! echo \"$installed\" | grep -qx \"$pkg\"; then "
+                        + "        pretty=$(grep -R \"Name=\" /usr/share/applications/ 2>/dev/null | grep -i \"$pkg\" | head -n1 | cut -d'=' -f2); "
                         + "        [ -z \"$pretty\" ] && pretty=\"$pkg\"; "
-                        + "        icon=$(grep -R \"Icon=\" /usr/share/applications/ | grep -i \"$pkg\" | head -n1 | cut -d'=' -f2); "
+                        + "        icon=$(grep -R \"Icon=\" /usr/share/applications/ 2>/dev/null | grep -i \"$pkg\" | head -n1 | cut -d'=' -f2); "
                         + "        [ -z \"$icon\" ] && icon=\"N/A\"; "
                         + "        echo \"(${pretty})[${desc}]{${arch}}<${icon}>?${pkg}?\"; "
-                        + "    fi "
+                        + "        count=$((count+1)); "
+                        + "        [ $count -ge " + prefs.getInt("limit", 500) + " ] && break; "
+                        + "    fi; "
                         + "done";
 
                 ProcessBuilder pb = new ProcessBuilder("bash", "-c", bashCommand);
                 currentProcess = pb.start();
                 BufferedReader reader = new BufferedReader(new InputStreamReader(currentProcess.getInputStream()));
                 String line;
-                int totalLines = 500;
+                int totalLines = prefs.getInt("limit", 500);
                 int currentLine = 0;
                 List<String> results = new ArrayList<>();
                 while (!cancelListing && (line = reader.readLine()) != null) {
@@ -1177,11 +1189,11 @@ public class main extends javax.swing.JFrame {
                         logtext.setText("<html>" + log + "</html>");
                         logtext.revalidate();
                         logtext.repaint();
-                    }else{
-                    log += "<font color='#006400'>Oparation finished...</font><br>";
-                    logtext.setText("<html>" + log + "</html>");
-                    logtext.revalidate();
-                    logtext.repaint();
+                    } else {
+                        log += "<font color='#006400'>Oparation finished...</font><br>";
+                        logtext.setText("<html>" + log + "</html>");
+                        logtext.revalidate();
+                        logtext.repaint();
                     }
                     SwingUtilities.invokeLater(() -> {
                         scrolllog();
@@ -1221,16 +1233,25 @@ public class main extends javax.swing.JFrame {
                         }
                     }
 
-                    item.addMouseListener(new java.awt.event.MouseAdapter() {
-                        @Override
-                        public void mouseEntered(java.awt.event.MouseEvent e) {
-                            if (item.isEnabled() == true) {
-                                item.setIcon(new ImageIcon(inverted));
+                    item.getModel().addChangeListener(e -> {
+
+                        MenuElement[] path = MenuSelectionManager
+                                .defaultManager()
+                                .getSelectedPath();
+
+                        boolean menuOpen = false;
+
+                        for (MenuElement element : path) {
+                            if (element == item) {
+                                menuOpen = true;
+                                break;
                             }
                         }
 
-                        @Override
-                        public void mouseExited(java.awt.event.MouseEvent e) {
+                        if (item.isEnabled()
+                                && (item.getModel().isArmed() || menuOpen)) {
+                            item.setIcon(new ImageIcon(inverted));
+                        } else {
                             item.setIcon(imageIcon);
                         }
                     });
@@ -1243,6 +1264,9 @@ public class main extends javax.swing.JFrame {
 
     public main(String[] args) throws Exception, IOException, ClassNotFoundException, InstantiationException, IllegalAccessException, UnsupportedLookAndFeelException, java.lang.Exception {
         int mode;
+        int limit = 300;
+        int listingLimit = prefs.getInt("limit", 500); // default 500
+
         // if (isDpkgRunning()) {
         //System.exit(0);
         // }
@@ -1280,6 +1304,44 @@ public class main extends javax.swing.JFrame {
         this.setIconImage(new ImageIcon(main.class.getResource("icon.png")).getImage());
 
         initComponents();
+        switch (listingLimit) {
+            case 100:
+                n100.setSelected(true);
+                n200.setSelected(false);
+                n300.setSelected(false);
+                n400.setSelected(false);
+                n500.setSelected(false);
+                break;
+            case 200:
+                n100.setSelected(false);
+                n200.setSelected(true);
+                n300.setSelected(false);
+                n400.setSelected(false);
+                n500.setSelected(false);
+                break;
+            case 300:
+                n100.setSelected(false);
+                n200.setSelected(false);
+                n300.setSelected(true);
+                n400.setSelected(false);
+                n500.setSelected(false);
+                break;
+            case 400:
+                n100.setSelected(false);
+                n200.setSelected(false);
+                n300.setSelected(false);
+                n400.setSelected(true);
+                n500.setSelected(false);
+                break;
+            case 500:
+                n100.setSelected(false);
+                n200.setSelected(false);
+                n300.setSelected(false);
+                n400.setSelected(false);
+                n500.setSelected(true);
+                break;
+
+        }
         this.setLocationRelativeTo(null);
         SwingUtilities.invokeLater(() -> {
             categories.setSelectedIndex(1);
@@ -1362,6 +1424,12 @@ public class main extends javax.swing.JFrame {
         jMenu2 = new javax.swing.JMenu();
         byname = new javax.swing.JCheckBoxMenuItem();
         bydescr = new javax.swing.JCheckBoxMenuItem();
+        listlimit = new javax.swing.JMenu();
+        n100 = new javax.swing.JRadioButtonMenuItem();
+        n200 = new javax.swing.JRadioButtonMenuItem();
+        n300 = new javax.swing.JRadioButtonMenuItem();
+        n400 = new javax.swing.JRadioButtonMenuItem();
+        n500 = new javax.swing.JRadioButtonMenuItem();
         search = new javax.swing.JMenuItem();
         addrepo = new javax.swing.JMenuItem();
         rmrepo = new javax.swing.JMenuItem();
@@ -1812,6 +1880,52 @@ public class main extends javax.swing.JFrame {
 
         editm.add(jMenu2);
 
+        listlimit.setIcon(new javax.swing.ImageIcon(getClass().getResource("/aptcenter/limit.png"))); // NOI18N
+        listlimit.setText("List up to...");
+
+        n100.setText("100 packages");
+        n100.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                n100ActionPerformed(evt);
+            }
+        });
+        listlimit.add(n100);
+
+        n200.setText("200 packages");
+        n200.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                n200ActionPerformed(evt);
+            }
+        });
+        listlimit.add(n200);
+
+        n300.setText("300 packages");
+        n300.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                n300ActionPerformed(evt);
+            }
+        });
+        listlimit.add(n300);
+
+        n400.setText("400 packages");
+        n400.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                n400ActionPerformed(evt);
+            }
+        });
+        listlimit.add(n400);
+
+        n500.setSelected(true);
+        n500.setText("500 packages");
+        n500.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                n500ActionPerformed(evt);
+            }
+        });
+        listlimit.add(n500);
+
+        editm.add(listlimit);
+
         search.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_S, java.awt.event.InputEvent.CTRL_DOWN_MASK));
         search.setIcon(new javax.swing.ImageIcon(getClass().getResource("/aptcenter/search.png"))); // NOI18N
         search.setText("Search...");
@@ -2180,6 +2294,51 @@ public class main extends javax.swing.JFrame {
                 + "This project is source-available.\nModification and redistribution are not permitted. \nThis project includes a modified asset based on Google \nNoto Emoji (SIL Open Font License 1.1).\nThis project uses the FlatLaf look and feel library.\nhttps://www.formdev.com/flatlaf/", "Software lisence", JOptionPane.INFORMATION_MESSAGE);
     }//GEN-LAST:event_jMenuItem2ActionPerformed
 
+    private void n400ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_n400ActionPerformed
+        n100.setSelected(false);
+        n200.setSelected(false);
+        n300.setSelected(false);
+        n400.setSelected(true);
+        n500.setSelected(false);
+        prefs.putInt("limit", 400);
+    }//GEN-LAST:event_n400ActionPerformed
+
+    private void n100ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_n100ActionPerformed
+        n100.setSelected(true);
+        n200.setSelected(false);
+        n300.setSelected(false);
+        n400.setSelected(false);
+        n500.setSelected(false);
+        prefs.putInt("limit", 100);
+    }//GEN-LAST:event_n100ActionPerformed
+
+    private void n200ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_n200ActionPerformed
+        n100.setSelected(false);
+        n200.setSelected(true);
+        n300.setSelected(false);
+        n400.setSelected(false);
+        n500.setSelected(false);
+        prefs.putInt("limit", 200);
+    }//GEN-LAST:event_n200ActionPerformed
+
+    private void n300ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_n300ActionPerformed
+        n100.setSelected(false);
+        n200.setSelected(false);
+        n300.setSelected(true);
+        n400.setSelected(false);
+        n500.setSelected(false);
+        prefs.putInt("limit", 300);
+    }//GEN-LAST:event_n300ActionPerformed
+
+    private void n500ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_n500ActionPerformed
+        n100.setSelected(false);
+        n200.setSelected(false);
+        n300.setSelected(false);
+        n400.setSelected(false);
+        n500.setSelected(true);
+        prefs.putInt("limit", 500);
+    }//GEN-LAST:event_n500ActionPerformed
+
     /**
      * @param args the command line arguments
      */
@@ -2271,8 +2430,14 @@ public class main extends javax.swing.JFrame {
     private javax.swing.JTabbedPane jTabbedPane1;
     private javax.swing.JToolBar jToolBar1;
     private javax.swing.JLabel jvm;
+    private javax.swing.JMenu listlimit;
     private javax.swing.JTable localpackages;
     private javax.swing.JLabel logtext;
+    private javax.swing.JRadioButtonMenuItem n100;
+    private javax.swing.JRadioButtonMenuItem n200;
+    private javax.swing.JRadioButtonMenuItem n300;
+    private javax.swing.JRadioButtonMenuItem n400;
+    private javax.swing.JRadioButtonMenuItem n500;
     private javax.swing.JButton ok;
     private javax.swing.JTable onlinepackages;
     private javax.swing.JMenuItem refreshopt;
